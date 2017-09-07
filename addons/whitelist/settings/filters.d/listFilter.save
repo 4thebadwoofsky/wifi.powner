@@ -1,0 +1,7 @@
+#!/bin/bash
+mac=`cat -`
+
+while 1
+
+grep -i --invert-match "$mymac"
+

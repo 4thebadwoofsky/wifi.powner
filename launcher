@@ -1,0 +1,124 @@
+#!/bin/bash
+gid=`id -g`
+
+if [ $gid -ne 0 ]; then
+	echo "gid!=0, no root privileg"
+	exit
+fi
+
+#Farben
+export RED="\e[31m"
+export NRM="\e[0m"
+export GRN="\e[32m"
+
+export ADDON_NAME="base"
+export ADDON="addons/base"
+
+#log logger-name log-text*
+log(){
+	echo -e "[$1"$NRM"\t] $2"
+}
+#mod module-name <submod(def=main)>
+mod(){
+	if [ ! -f $ADDON/data/mod.kill ]; then
+		module=$1
+		subMod="main"
+		if [ ${#2} -ge 1 ]; then
+			subMod=$2
+		fi
+		bash "$ADDON/modules/$module/$subMod.mod"
+		echo -e $NRM
+	fi
+}
+
+#Startup
+startup(){
+	tmux new-session -d -s "wp" sudo ./launcher main #Hauptsitzung starten
+	tmux split-window -b -v -l 6 -t "wp" sudo ./launcher logo $mypid #Logo einsetzen
+	tmux select-pane -d -t "wp" #Eingabe ins Logo-Modul deaktivieren
+	tmux select-pane -l -t "wp" #Die hauptsitzung fokusieren
+	tmux attach-session -t "wp" #Attachen
+}
+addon(){
+	clear
+	addonDir=$1
+	addonName=$2
+	export ADDON=$addonDir
+	echo $addonDir > addons/base/addon.set
+	bash $addonDir/init.mod
+}
+main(){
+	selidx=-1
+	tempsel=0
+	cntidx=0
+	for d in addons/*; do
+		idx=${#d}
+		idx=$((idx-6))
+		dirname=$(echo "$d" | tail -c $idx)
+		if [ $dirname == "base" ]; then
+			continue
+		fi
+		addonDesc=`cat addons/$dirname/addon.info`
+		cntindex=$((cntindex+1))
+		echo "[$cntidx] $dirname: $addonDesc"
+	done
+	while [ $selidx -eq -1 ];
+	do
+		read -s -n 1 tempsel
+		case "$tempsel" in
+			''|*[!0-9]*)
+			;;
+			*)
+				if [ $tempsel -ge 0 ] && [ $tempsel -le $cntidx ]; then
+					selidx=$tempsel
+					break
+				fi
+			;;
+		esac
+	done
+	calcindex=-1
+	addonDir=""
+	addonName=""
+	for dir in addons/*; do
+		idx=${#dir}
+		idx=$((idx-6))
+		dirname=$(echo "$dir" | tail -c $idx)
+		if [ $dirname == "base" ]; then
+			continue
+		fi
+		calcindex=$((calcindex+1))
+		if [ $calcindex == $selidx ]; then
+			addonName=$dirname
+			addonDir=$dir
+			break
+		fi
+	done
+	addon $addonDir $addonName
+	log "CORE" "Finished, press Ctrl-C to shutdown"
+	sleep 7d
+}
+case "$1" in
+	logo)
+		mod init logo
+		running=1
+		pid=$2
+		while [ $running -eq 1 ]
+		do
+			res=$(tmux list-panes -t "wp" -F '#{pane_id}' | egrep "%[0]")
+			if [ ${#res} -ne 2 ]; then
+				echo $res
+				running=0
+			fi
+			sleep 1
+		done
+		echo "Shutting down..."
+		tmux set-option -t "wp" -g status off
+		sleep 3
+		;;
+	main)
+		main
+		;;
+	*)
+		startup
+		;;
+esac
